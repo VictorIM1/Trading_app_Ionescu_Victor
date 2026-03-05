@@ -16,7 +16,7 @@ We need to keep in mind that the current LLM models are very powerful, thus the 
 
 ### Deadline
 
-The submission deadline for this test is **11:59 PM on May 17, 2026**. Please make sure to submit your application before the deadline to be considered for the internship.
+The submission deadline for this test is **11:59 PM on April 17, 2026**. Please make sure to submit your application before the deadline to be considered for the internship.
 
 ### I do not know web development, can I still do the test?
 
