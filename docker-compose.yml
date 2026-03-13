@@ -20,8 +20,6 @@ services:
       dockerfile: Dockerfile
     depends_on:
       - server
-    environment:
-      VITE_API_URL: http://localhost:4005
     ports:
       - "3005:3000"
 

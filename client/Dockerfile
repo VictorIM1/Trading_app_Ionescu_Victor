@@ -8,7 +8,6 @@ RUN bun install --frozen-lockfile
 COPY . .
 
 ENV NODE_ENV=development
-ENV VITE_API_URL=http://localhost:4001
 
 EXPOSE 3000
 

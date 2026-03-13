@@ -1,36 +1,82 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useAuth } from "@/lib/auth-context";
-import { api, Market } from "@/lib/api";
+import { api, Market, MarketListResponse } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { MarketCard } from "@/components/market-card";
 import { useNavigate } from "@tanstack/react-router";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+
+const PAGE_SIZE = 20;
+
+const emptyMarketResponse: MarketListResponse = {
+  items: [],
+  pagination: {
+    page: 1,
+    pageSize: PAGE_SIZE,
+    total: 0,
+    totalPages: 1,
+  },
+};
 
 function DashboardPage() {
   const { isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
-  const [markets, setMarkets] = useState<Market[]>([]);
+  const [marketResponse, setMarketResponse] = useState<MarketListResponse>(emptyMarketResponse);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [status, setStatus] = useState<"active" | "resolved">("active");
+  const [status, setStatus] = useState<"all" | "active" | "resolved">("active");
+  const [sortBy, setSortBy] = useState<"createdAt" | "totalBets" | "participants">("createdAt");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [page, setPage] = useState(1);
 
-  const loadMarkets = async () => {
+  const loadMarkets = useCallback(async (showLoading = false) => {
     try {
-      setIsLoading(true);
+      if (showLoading) {
+        setIsLoading(true);
+      }
       setError(null);
-      const data = await api.listMarkets(status);
-      setMarkets(data);
+      const data = await api.listMarkets({
+        status,
+        sortBy,
+        sortOrder,
+        page,
+        pageSize: PAGE_SIZE,
+      });
+      setMarketResponse(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load markets");
     } finally {
-      setIsLoading(false);
+      if (showLoading) {
+        setIsLoading(false);
+      }
     }
-  };
+  }, [status, sortBy, sortOrder, page]);
 
   useEffect(() => {
-    loadMarkets();
-  }, [status]);
+    loadMarkets(true);
+  }, [loadMarkets]);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      loadMarkets(false);
+    }, 5000);
+
+    return () => clearInterval(intervalId);
+  }, [loadMarkets]);
+
+  const markets = marketResponse.items;
+  const { pagination } = marketResponse;
+
+  const showingFrom = useMemo(() => {
+    if (pagination.total === 0) return 0;
+    return (pagination.page - 1) * pagination.pageSize + 1;
+  }, [pagination.page, pagination.pageSize, pagination.total]);
+
+  const showingTo = useMemo(() => {
+    if (pagination.total === 0) return 0;
+    return Math.min(pagination.page * pagination.pageSize, pagination.total);
+  }, [pagination.page, pagination.pageSize, pagination.total]);
 
   if (!isAuthenticated) {
     return (
@@ -66,23 +112,64 @@ function DashboardPage() {
           </div>
         </div>
 
-        {/* Filters */}
-        <div className="mb-6 flex gap-4">
-          <Button
-            variant={status === "active" ? "default" : "outline"}
-            onClick={() => setStatus("active")}
-          >
-            Active Markets
-          </Button>
-          <Button
-            variant={status === "resolved" ? "default" : "outline"}
-            onClick={() => setStatus("resolved")}
-          >
-            Resolved Markets
-          </Button>
-          <Button variant="outline" onClick={loadMarkets} disabled={isLoading}>
-            {isLoading ? "Refreshing..." : "Refresh"}
-          </Button>
+        {/* Controls */}
+        <div className="mb-6 rounded-lg border bg-white/80 p-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+            <label className="text-sm font-medium text-gray-700">
+              Status
+              <select
+                className="mt-1 w-full rounded-md border bg-white px-3 py-2 text-sm"
+                value={status}
+                onChange={(e) => {
+                  setStatus(e.target.value as "all" | "active" | "resolved");
+                  setPage(1);
+                }}
+              >
+                <option value="active">Active</option>
+                <option value="resolved">Resolved</option>
+                <option value="all">All</option>
+              </select>
+            </label>
+
+            <label className="text-sm font-medium text-gray-700">
+              Sort By
+              <select
+                className="mt-1 w-full rounded-md border bg-white px-3 py-2 text-sm"
+                value={sortBy}
+                onChange={(e) => {
+                  setSortBy(e.target.value as "createdAt" | "totalBets" | "participants");
+                  setPage(1);
+                }}
+              >
+                <option value="createdAt">Creation Date</option>
+                <option value="totalBets">Total Bet Size</option>
+                <option value="participants">Participants</option>
+              </select>
+            </label>
+
+            <label className="text-sm font-medium text-gray-700">
+              Order
+              <select
+                className="mt-1 w-full rounded-md border bg-white px-3 py-2 text-sm"
+                value={sortOrder}
+                onChange={(e) => {
+                  setSortOrder(e.target.value as "asc" | "desc");
+                  setPage(1);
+                }}
+              >
+                <option value="desc">Descending</option>
+                <option value="asc">Ascending</option>
+              </select>
+            </label>
+
+            <div className="flex items-end">
+              <Button variant="outline" onClick={() => loadMarkets(true)} disabled={isLoading}>
+                {isLoading ? "Refreshing..." : "Refresh"}
+              </Button>
+            </div>
+          </div>
+
+          <p className="mt-3 text-xs text-gray-500">Live market odds and totals update automatically every 5 seconds.</p>
         </div>
 
         {/* Error State */}
@@ -104,17 +191,45 @@ function DashboardPage() {
             <CardContent className="flex items-center justify-center py-12">
               <div className="text-center">
                 <p className="text-muted-foreground text-lg">
-                  No {status} markets found. {status === "active" && "Create one to get started!"}
+                  No {status === "all" ? "" : status} markets found. {status === "active" && "Create one to get started!"}
                 </p>
               </div>
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {markets.map((market) => (
-              <MarketCard key={market.id} market={market} />
-            ))}
-          </div>
+          <>
+            <div className="mb-4 text-sm text-gray-600">
+              Showing {showingFrom}-{showingTo} of {pagination.total} markets
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {markets.map((market: Market) => (
+                <MarketCard key={market.id} market={market} />
+              ))}
+            </div>
+
+            <div className="mt-6 flex items-center justify-between rounded-lg border bg-white/80 p-4">
+              <Button
+                variant="outline"
+                disabled={pagination.page <= 1 || isLoading}
+                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+              >
+                Previous
+              </Button>
+
+              <span className="text-sm text-gray-600">
+                Page {pagination.page} of {pagination.totalPages}
+              </span>
+
+              <Button
+                variant="outline"
+                disabled={pagination.page >= pagination.totalPages || isLoading}
+                onClick={() => setPage((prev) => Math.min(pagination.totalPages, prev + 1))}
+              >
+                Next
+              </Button>
+            </div>
+          </>
         )}
       </div>
     </div>

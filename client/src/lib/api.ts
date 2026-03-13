@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4001";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "";
 
 // Types
 export interface Market {
@@ -7,8 +7,28 @@ export interface Market {
   description?: string;
   status: "active" | "resolved";
   creator?: string;
+  createdAt?: string;
+  participantsCount: number;
   outcomes: MarketOutcome[];
   totalMarketBets: number;
+}
+
+export interface MarketListResponse {
+  items: Market[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
+export interface ListMarketsParams {
+  status?: "all" | "active" | "resolved";
+  sortBy?: "createdAt" | "totalBets" | "participants";
+  sortOrder?: "asc" | "desc";
+  page?: number;
+  pageSize?: number;
 }
 
 export interface MarketOutcome {
@@ -91,8 +111,19 @@ class ApiClient {
   }
 
   // Markets endpoints
-  async listMarkets(status: "active" | "resolved" = "active"): Promise<Market[]> {
-    return this.request(`/api/markets?status=${status}`);
+  async listMarkets(params: ListMarketsParams = {}): Promise<MarketListResponse> {
+    const search = new URLSearchParams();
+
+    if (params.status) search.set("status", params.status);
+    if (params.sortBy) search.set("sortBy", params.sortBy);
+    if (params.sortOrder) search.set("sortOrder", params.sortOrder);
+    if (params.page) search.set("page", String(params.page));
+    if (params.pageSize) search.set("pageSize", String(params.pageSize));
+
+    const queryString = search.toString();
+    const endpoint = queryString ? `/api/markets?${queryString}` : "/api/markets";
+
+    return this.request(endpoint);
   }
 
   async getMarket(id: number): Promise<Market> {
