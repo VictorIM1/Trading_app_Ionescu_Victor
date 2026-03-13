@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeAll } from "bun:test";
 import { migrate } from "drizzle-orm/bun-sqlite/migrator";
+import { eq } from "drizzle-orm";
 import { app } from "../index";
 import db from "../src/db";
+import { marketsTable } from "../src/db/schema";
 
 const BASE = "http://localhost";
 
@@ -235,6 +237,45 @@ describe("Bets", () => {
     expect(res.status).toBe(400);
     const data = await res.json();
     expect(data.errors.length).toBeGreaterThan(0);
+  });
+});
+
+describe("User Profile Bets", () => {
+  it("GET /api/users/me/bets — returns active bets with pagination", async () => {
+    const res = await app.handle(
+      new Request(`${BASE}/api/users/me/bets?status=active&page=1&pageSize=20`, {
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(Array.isArray(data.items)).toBe(true);
+    expect(data.pagination.page).toBe(1);
+    expect(data.pagination.pageSize).toBe(20);
+  });
+
+  it("GET /api/users/me/bets — returns resolved bets with win/loss", async () => {
+    await db
+      .update(marketsTable)
+      .set({ status: "resolved", resolvedOutcomeId: outcomeId })
+      .where(eq(marketsTable.id, marketId));
+
+    const res = await app.handle(
+      new Request(`${BASE}/api/users/me/bets?status=resolved&page=1&pageSize=20`, {
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(Array.isArray(data.items)).toBe(true);
+    expect(data.items.length).toBeGreaterThan(0);
+    expect(data.items[0].didWin).toBeDefined();
   });
 });
 

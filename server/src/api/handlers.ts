@@ -420,3 +420,106 @@ export async function handlePlaceBet({
     amount: bet[0].amount,
   };
 }
+
+export async function handleListMyBets({
+  query,
+  user,
+}: {
+  query: {
+    status?: "active" | "resolved";
+    page?: number;
+    pageSize?: number;
+  };
+  user: typeof usersTable.$inferSelect;
+}) {
+  const status = query.status || "active";
+  const page = Math.max(1, Number(query.page || 1));
+  const pageSize = Math.min(100, Math.max(1, Number(query.pageSize || 20)));
+  const offset = (page - 1) * pageSize;
+
+  const totalResult = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(betsTable)
+    .innerJoin(marketsTable, eq(marketsTable.id, betsTable.marketId))
+    .where(and(eq(betsTable.userId, user.id), eq(marketsTable.status, status)));
+
+  const total = Number(totalResult[0]?.count ?? 0);
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  const rows = await db
+    .select({
+      betId: betsTable.id,
+      amount: betsTable.amount,
+      createdAt: betsTable.createdAt,
+      marketId: marketsTable.id,
+      marketTitle: marketsTable.title,
+      marketStatus: marketsTable.status,
+      resolvedOutcomeId: marketsTable.resolvedOutcomeId,
+      outcomeId: marketOutcomesTable.id,
+      outcomeTitle: marketOutcomesTable.title,
+    })
+    .from(betsTable)
+    .innerJoin(marketsTable, eq(marketsTable.id, betsTable.marketId))
+    .innerJoin(marketOutcomesTable, eq(marketOutcomesTable.id, betsTable.outcomeId))
+    .where(and(eq(betsTable.userId, user.id), eq(marketsTable.status, status)))
+    .orderBy(desc(betsTable.createdAt))
+    .limit(pageSize)
+    .offset(offset);
+
+  const marketIds = Array.from(new Set(rows.map((row) => row.marketId)));
+
+  const totalsRows = marketIds.length
+    ? await db
+        .select({
+          marketId: marketOutcomesTable.marketId,
+          outcomeId: marketOutcomesTable.id,
+          totalBets: sql<number>`coalesce(sum(${betsTable.amount}), 0)`,
+        })
+        .from(marketOutcomesTable)
+        .leftJoin(betsTable, eq(betsTable.outcomeId, marketOutcomesTable.id))
+        .where(inArray(marketOutcomesTable.marketId, marketIds))
+        .groupBy(marketOutcomesTable.marketId, marketOutcomesTable.id)
+    : [];
+
+  const totalsByMarket = new Map<number, Array<{ outcomeId: number; totalBets: number }>>();
+
+  for (const row of totalsRows) {
+    const list = totalsByMarket.get(row.marketId) || [];
+    list.push({ outcomeId: row.outcomeId, totalBets: Number(row.totalBets ?? 0) });
+    totalsByMarket.set(row.marketId, list);
+  }
+
+  const items = rows.map((row) => {
+    const marketTotals = totalsByMarket.get(row.marketId) || [];
+    const totalMarketBets = marketTotals.reduce((sum, item) => sum + item.totalBets, 0);
+    const outcomeTotal = marketTotals.find((item) => item.outcomeId === row.outcomeId)?.totalBets || 0;
+    const currentOdds =
+      totalMarketBets > 0 ? Number(((outcomeTotal / totalMarketBets) * 100).toFixed(2)) : 0;
+
+    const isResolved = row.marketStatus === "resolved";
+    const didWin = isResolved ? row.resolvedOutcomeId === row.outcomeId : null;
+
+    return {
+      id: row.betId,
+      marketId: row.marketId,
+      marketTitle: row.marketTitle,
+      outcomeId: row.outcomeId,
+      outcomeTitle: row.outcomeTitle,
+      amount: row.amount,
+      placedAt: row.createdAt,
+      currentOdds,
+      status: row.marketStatus,
+      didWin,
+    };
+  });
+
+  return {
+    items,
+    pagination: {
+      page,
+      pageSize,
+      total,
+      totalPages,
+    },
+  };
+}

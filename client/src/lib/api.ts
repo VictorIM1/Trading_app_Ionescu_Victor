@@ -31,6 +31,29 @@ export interface ListMarketsParams {
   pageSize?: number;
 }
 
+export interface UserBet {
+  id: number;
+  marketId: number;
+  marketTitle: string;
+  outcomeId: number;
+  outcomeTitle: string;
+  amount: number;
+  placedAt: string;
+  currentOdds: number;
+  status: "active" | "resolved";
+  didWin: boolean | null;
+}
+
+export interface UserBetListResponse {
+  items: UserBet[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
 export interface MarketOutcome {
   id: number;
   title: string;
@@ -143,6 +166,20 @@ class ApiClient {
       method: "POST",
       body: JSON.stringify({ outcomeId, amount }),
     });
+  }
+
+  async listMyBets(
+    status: "active" | "resolved",
+    page = 1,
+    pageSize = 20,
+  ): Promise<UserBetListResponse> {
+    const query = new URLSearchParams({
+      status,
+      page: String(page),
+      pageSize: String(pageSize),
+    });
+
+    return this.request(`/api/users/me/bets?${query.toString()}`);
   }
 }
 
