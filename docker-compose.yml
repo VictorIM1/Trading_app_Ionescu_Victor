@@ -24,4 +24,4 @@ services:
       - "3005:3000"
 
 volumes:
-  server_data:
+  server_data:software  

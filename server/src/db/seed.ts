@@ -38,6 +38,7 @@ type SeededUser = {
   username: string;
   email: string;
   password: string;
+  balance: number;
   remainingBalance: number;
 };
 
@@ -193,12 +194,24 @@ async function insertUsers() {
   }
 
   const seededUsers: SeededUser[] = insertedUsers.map((user) => ({
+    balance: faker.number.int({ min: 500, max: 10_000 }),
     id: user.id,
     username: user.username,
     email: user.email,
     password: SHARED_PASSWORD,
-    remainingBalance: faker.number.int({ min: 500, max: 10_000 }),
+    remainingBalance: 0,
   }));
+
+  for (const seededUser of seededUsers) {
+    seededUser.remainingBalance = seededUser.balance;
+  }
+
+  for (const seededUser of seededUsers) {
+    await db
+      .update(schema.usersTable)
+      .set({ balance: seededUser.balance })
+      .where(eq(schema.usersTable.id, seededUser.id));
+  }
 
   console.log(`Created ${seededUsers.length} users.`);
 

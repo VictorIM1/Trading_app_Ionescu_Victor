@@ -17,6 +17,10 @@ export const usersTable = sqliteTable(
     id: integer("id").primaryKey({ autoIncrement: true }),
     username: text("username").notNull().unique(),
     email: text("email").notNull().unique(),
+    role: text("role", { enum: ["user", "admin"] })
+      .notNull()
+      .default("user"),
+    balance: real("balance").notNull().default(1000),
     passwordHash: text("password_hash").notNull(),
     createdAt: integer("created_at", { mode: "timestamp" })
       .notNull()
@@ -38,7 +42,7 @@ export const marketsTable = sqliteTable(
     id: integer("id").primaryKey({ autoIncrement: true }),
     title: text("title").notNull(),
     description: text("description"),
-    status: text("status", { enum: ["active", "resolved"] })
+    status: text("status", { enum: ["active", "resolved", "archived"] })
       .notNull()
       .default("active"),
     createdBy: integer("created_by")
@@ -52,6 +56,50 @@ export const marketsTable = sqliteTable(
   (table) => ({
     createdByIdx: index("markets_created_by_idx").on(table.createdBy),
     statusIdx: index("markets_status_idx").on(table.status),
+  }),
+);
+
+export const marketRefundsTable = sqliteTable(
+  "market_refunds",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    marketId: integer("market_id")
+      .notNull()
+      .references(() => marketsTable.id),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => usersTable.id),
+    amount: real("amount").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => ({
+    marketIdIdx: index("market_refunds_market_id_idx").on(table.marketId),
+    userIdIdx: index("market_refunds_user_id_idx").on(table.userId),
+    marketUserUnique: uniqueIndex("market_refunds_market_user_idx").on(table.marketId, table.userId),
+  }),
+);
+
+export const marketPayoutsTable = sqliteTable(
+  "market_payouts",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    marketId: integer("market_id")
+      .notNull()
+      .references(() => marketsTable.id),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => usersTable.id),
+    amount: real("amount").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => ({
+    marketIdIdx: index("market_payouts_market_id_idx").on(table.marketId),
+    userIdIdx: index("market_payouts_user_id_idx").on(table.userId),
+    marketUserUnique: uniqueIndex("market_payouts_market_user_idx").on(table.marketId, table.userId),
   }),
 );
 
@@ -101,6 +149,8 @@ export const betsTable = sqliteTable(
 export const usersRelations = relations(usersTable, ({ many }) => ({
   createdMarkets: many(marketsTable, { relationName: "createdBy" }),
   bets: many(betsTable, { relationName: "bets" }),
+  marketRefunds: many(marketRefundsTable, { relationName: "marketRefunds" }),
+  marketPayouts: many(marketPayoutsTable, { relationName: "marketPayouts" }),
 }));
 
 export const marketsRelations = relations(marketsTable, ({ one, many }) => ({
@@ -111,6 +161,8 @@ export const marketsRelations = relations(marketsTable, ({ one, many }) => ({
   }),
   outcomes: many(marketOutcomesTable, { relationName: "outcomes" }),
   bets: many(betsTable, { relationName: "bets" }),
+  refunds: many(marketRefundsTable, { relationName: "marketRefunds" }),
+  payouts: many(marketPayoutsTable, { relationName: "marketPayouts" }),
   resolvedOutcome: one(marketOutcomesTable, {
     fields: [marketsTable.resolvedOutcomeId],
     references: [marketOutcomesTable.id],
@@ -141,5 +193,31 @@ export const betsRelations = relations(betsTable, ({ one }) => ({
     fields: [betsTable.outcomeId],
     references: [marketOutcomesTable.id],
     relationName: "bets",
+  }),
+}));
+
+export const marketRefundsRelations = relations(marketRefundsTable, ({ one }) => ({
+  market: one(marketsTable, {
+    fields: [marketRefundsTable.marketId],
+    references: [marketsTable.id],
+    relationName: "marketRefunds",
+  }),
+  user: one(usersTable, {
+    fields: [marketRefundsTable.userId],
+    references: [usersTable.id],
+    relationName: "marketRefunds",
+  }),
+}));
+
+export const marketPayoutsRelations = relations(marketPayoutsTable, ({ one }) => ({
+  market: one(marketsTable, {
+    fields: [marketPayoutsTable.marketId],
+    references: [marketsTable.id],
+    relationName: "marketPayouts",
+  }),
+  user: one(usersTable, {
+    fields: [marketPayoutsTable.userId],
+    references: [usersTable.id],
+    relationName: "marketPayouts",
   }),
 }));

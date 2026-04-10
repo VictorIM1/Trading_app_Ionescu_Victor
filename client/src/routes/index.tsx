@@ -20,12 +20,12 @@ const emptyMarketResponse: MarketListResponse = {
 };
 
 function DashboardPage() {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, updateUser } = useAuth();
   const navigate = useNavigate();
   const [marketResponse, setMarketResponse] = useState<MarketListResponse>(emptyMarketResponse);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [status, setStatus] = useState<"all" | "active" | "resolved">("active");
+  const [status, setStatus] = useState<"all" | "active" | "resolved" | "archived">("active");
   const [sortBy, setSortBy] = useState<"createdAt" | "totalBets" | "participants">("createdAt");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState(1);
@@ -65,6 +65,25 @@ function DashboardPage() {
     return () => clearInterval(intervalId);
   }, [loadMarkets]);
 
+  useEffect(() => {
+    if (!isAuthenticated) {
+      return;
+    }
+
+    const refreshMe = async () => {
+      try {
+        const currentUser = await api.getCurrentUser();
+        updateUser(currentUser);
+      } catch {
+        // Silent refresh: market loading already surfaces auth/network issues.
+      }
+    };
+
+    refreshMe();
+    const intervalId = setInterval(refreshMe, 5000);
+    return () => clearInterval(intervalId);
+  }, [isAuthenticated, updateUser]);
+
   const markets = marketResponse.items;
   const { pagination } = marketResponse;
 
@@ -103,8 +122,15 @@ function DashboardPage() {
           <div>
             <h1 className="text-4xl font-bold text-gray-900">Markets</h1>
             <p className="text-gray-600 mt-2">Welcome back, {user?.username}!</p>
+            <p className="mt-1 text-sm text-gray-700">Balance: ${Number(user?.balance ?? 0).toFixed(2)}</p>
+            {user?.role === "admin" && (
+              <p className="mt-1 text-sm font-medium text-amber-700">Admin mode: market resolution controls enabled.</p>
+            )}
           </div>
           <div className="flex items-center gap-4">
+            <Button variant="outline" onClick={() => navigate({ to: "/leaderboard" })}>
+              Leaderboard
+            </Button>
             <Button variant="outline" onClick={() => navigate({ to: "/profile" })}>
               Profile
             </Button>
@@ -124,12 +150,13 @@ function DashboardPage() {
                 className="mt-1 w-full rounded-md border bg-white px-3 py-2 text-sm"
                 value={status}
                 onChange={(e) => {
-                  setStatus(e.target.value as "all" | "active" | "resolved");
+                  setStatus(e.target.value as "all" | "active" | "resolved" | "archived");
                   setPage(1);
                 }}
               >
                 <option value="active">Active</option>
                 <option value="resolved">Resolved</option>
+                <option value="archived">Archived</option>
                 <option value="all">All</option>
               </select>
             </label>

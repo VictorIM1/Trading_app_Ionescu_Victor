@@ -1,6 +1,13 @@
 import { eq, and, asc, desc, inArray, sql } from "drizzle-orm";
 import db from "../db";
-import { usersTable, marketsTable, marketOutcomesTable, betsTable } from "../db/schema";
+import {
+  usersTable,
+  marketsTable,
+  marketOutcomesTable,
+  betsTable,
+  marketRefundsTable,
+  marketPayoutsTable,
+} from "../db/schema";
 import { hashPassword, verifyPassword, type AuthTokenPayload } from "../lib/auth";
 import {
   validateRegistration,
@@ -41,7 +48,13 @@ export async function handleRegister({
 
   const passwordHash = await hashPassword(password);
 
-  const newUser = await db.insert(usersTable).values({ username, email, passwordHash }).returning();
+  const existingUsersCountResult = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(usersTable);
+  const existingUsersCount = Number(existingUsersCountResult[0]?.count ?? 0);
+  const role: "user" | "admin" = existingUsersCount === 0 ? "admin" : "user";
+
+  const newUser = await db.insert(usersTable).values({ username, email, passwordHash, role }).returning();
 
   const token = await jwt.sign({ userId: newUser[0].id });
 
@@ -50,6 +63,8 @@ export async function handleRegister({
     id: newUser[0].id,
     username: newUser[0].username,
     email: newUser[0].email,
+    role: newUser[0].role,
+    balance: Number(newUser[0].balance),
     token,
   };
 }
@@ -80,13 +95,43 @@ export async function handleLogin({
     return { error: "Invalid email or password" };
   }
 
+  let role = user.role;
+  if (role !== "admin") {
+    const adminCountResult = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(usersTable)
+      .where(eq(usersTable.role, "admin"));
+
+    const adminCount = Number(adminCountResult[0]?.count ?? 0);
+    if (adminCount === 0) {
+      await db.update(usersTable).set({ role: "admin" }).where(eq(usersTable.id, user.id));
+      role = "admin";
+    }
+  }
+
   const token = await jwt.sign({ userId: user.id });
 
   return {
     id: user.id,
     username: user.username,
     email: user.email,
+    role,
+    balance: Number(user.balance),
     token,
+  };
+}
+
+export async function handleGetCurrentUser({
+  user,
+}: {
+  user: typeof usersTable.$inferSelect;
+}) {
+  return {
+    id: user.id,
+    username: user.username,
+    email: user.email,
+    role: user.role,
+    balance: Number(user.balance),
   };
 }
 
@@ -141,7 +186,7 @@ export async function handleListMarkets({
   query,
 }: {
   query: {
-    status?: "all" | "active" | "resolved";
+    status?: "all" | "active" | "resolved" | "archived";
     sortBy?: "createdAt" | "totalBets" | "participants";
     sortOrder?: "asc" | "desc";
     page?: number;
@@ -358,6 +403,81 @@ export async function handleGetMarket({
   };
 }
 
+export async function handleGetMarketOddsHistory({
+  params,
+  set,
+}: {
+  params: { id: number };
+  set: { status: number };
+}) {
+  const market = await db.query.marketsTable.findFirst({
+    where: eq(marketsTable.id, params.id),
+    with: {
+      outcomes: {
+        orderBy: (outcomes, { asc }) => asc(outcomes.position),
+      },
+    },
+  });
+
+  if (!market) {
+    set.status = 404;
+    return { error: "Market not found" };
+  }
+
+  const betRows = await db
+    .select({
+      id: betsTable.id,
+      outcomeId: betsTable.outcomeId,
+      amount: betsTable.amount,
+      createdAt: betsTable.createdAt,
+    })
+    .from(betsTable)
+    .where(eq(betsTable.marketId, params.id))
+    .orderBy(asc(betsTable.createdAt), asc(betsTable.id));
+
+  const runningTotals = new Map<number, number>();
+  for (const outcome of market.outcomes) {
+    runningTotals.set(outcome.id, 0);
+  }
+
+  const snapshots: Array<{
+    timestamp: Date;
+    outcomes: Array<{ id: number; title: string; totalBets: number; odds: number }>;
+  }> = [];
+
+  const pushSnapshot = (timestamp: Date) => {
+    const totalMarketBets = Array.from(runningTotals.values()).reduce((sum, value) => sum + value, 0);
+
+    snapshots.push({
+      timestamp,
+      outcomes: market.outcomes.map((outcome) => {
+        const totalBets = runningTotals.get(outcome.id) || 0;
+        const odds =
+          totalMarketBets > 0 ? Number(((totalBets / totalMarketBets) * 100).toFixed(2)) : 0;
+
+        return {
+          id: outcome.id,
+          title: outcome.title,
+          totalBets,
+          odds,
+        };
+      }),
+    });
+  };
+
+  pushSnapshot(market.createdAt);
+
+  for (const bet of betRows) {
+    runningTotals.set(bet.outcomeId, (runningTotals.get(bet.outcomeId) || 0) + bet.amount);
+    pushSnapshot(bet.createdAt);
+  }
+
+  return {
+    marketId: market.id,
+    snapshots,
+  };
+}
+
 export async function handlePlaceBet({
   params,
   body,
@@ -401,23 +521,258 @@ export async function handlePlaceBet({
     return { error: "Outcome not found" };
   }
 
-  const bet = await db
-    .insert(betsTable)
-    .values({
-      userId: user.id,
-      marketId,
-      outcomeId,
-      amount: Number(amount),
-    })
-    .returning();
+  if (Number(user.balance) < Number(amount)) {
+    set.status = 400;
+    return { error: "Insufficient balance" };
+  }
+
+  const [bet] = await db.transaction(async (tx) => {
+    const created = await tx
+      .insert(betsTable)
+      .values({
+        userId: user.id,
+        marketId,
+        outcomeId,
+        amount: Number(amount),
+      })
+      .returning();
+
+    await tx
+      .update(usersTable)
+      .set({ balance: sql`${usersTable.balance} - ${Number(amount)}` })
+      .where(eq(usersTable.id, user.id));
+
+    return created;
+  });
 
   set.status = 201;
   return {
-    id: bet[0].id,
-    userId: bet[0].userId,
-    marketId: bet[0].marketId,
-    outcomeId: bet[0].outcomeId,
-    amount: bet[0].amount,
+    id: bet.id,
+    userId: bet.userId,
+    marketId: bet.marketId,
+    outcomeId: bet.outcomeId,
+    amount: bet.amount,
+  };
+}
+
+export async function handleResolveMarket({
+  params,
+  body,
+  set,
+  user,
+}: {
+  params: { id: number };
+  body: { outcomeId: number };
+  set: { status: number };
+  user: typeof usersTable.$inferSelect;
+}) {
+  if (user.role !== "admin") {
+    set.status = 403;
+    return { error: "Forbidden" };
+  }
+
+  const market = await db.query.marketsTable.findFirst({
+    where: eq(marketsTable.id, params.id),
+  });
+
+  if (!market) {
+    set.status = 404;
+    return { error: "Market not found" };
+  }
+
+  if (market.status !== "active") {
+    set.status = 400;
+    return { error: "Market is not active" };
+  }
+
+  const outcome = await db.query.marketOutcomesTable.findFirst({
+    where: and(eq(marketOutcomesTable.id, body.outcomeId), eq(marketOutcomesTable.marketId, params.id)),
+  });
+
+  if (!outcome) {
+    set.status = 404;
+    return { error: "Outcome not found" };
+  }
+
+  const bets = await db
+    .select({
+      userId: betsTable.userId,
+      outcomeId: betsTable.outcomeId,
+      amount: betsTable.amount,
+    })
+    .from(betsTable)
+    .where(eq(betsTable.marketId, params.id));
+
+  const totalPool = Number(bets.reduce((sum, bet) => sum + Number(bet.amount), 0).toFixed(2));
+  const winningPool = Number(
+    bets
+      .filter((bet) => bet.outcomeId === outcome.id)
+      .reduce((sum, bet) => sum + Number(bet.amount), 0)
+      .toFixed(2),
+  );
+
+  const payoutsByUser = new Map<number, number>();
+  if (totalPool > 0 && winningPool > 0) {
+    for (const bet of bets) {
+      if (bet.outcomeId !== outcome.id) {
+        continue;
+      }
+
+      const proportionalPayout = (Number(bet.amount) * totalPool) / winningPool;
+      payoutsByUser.set(
+        bet.userId,
+        Number(((payoutsByUser.get(bet.userId) || 0) + proportionalPayout).toFixed(2)),
+      );
+    }
+  }
+
+  const payouts = Array.from(payoutsByUser.entries()).map(([userId, amount]) => ({
+    userId,
+    amount,
+  }));
+
+  await db.transaction(async (tx) => {
+    await tx
+      .update(marketsTable)
+      .set({
+        status: "resolved",
+        resolvedOutcomeId: outcome.id,
+      })
+      .where(eq(marketsTable.id, params.id));
+
+    if (payouts.length > 0) {
+      await tx.insert(marketPayoutsTable).values(
+        payouts.map((entry) => ({
+          marketId: params.id,
+          userId: entry.userId,
+          amount: entry.amount,
+        })),
+      );
+
+      for (const entry of payouts) {
+        await tx
+          .update(usersTable)
+          .set({ balance: sql`${usersTable.balance} + ${entry.amount}` })
+          .where(eq(usersTable.id, entry.userId));
+      }
+    }
+  });
+
+  return {
+    success: true,
+    marketId: params.id,
+    resolvedOutcomeId: outcome.id,
+    totalPool,
+    winningPool,
+    totalPayout: Number(payouts.reduce((sum, item) => sum + item.amount, 0).toFixed(2)),
+    payouts,
+  };
+}
+
+export async function handleArchiveMarket({
+  params,
+  set,
+  user,
+}: {
+  params: { id: number };
+  set: { status: number };
+  user: typeof usersTable.$inferSelect;
+}) {
+  if (user.role !== "admin") {
+    set.status = 403;
+    return { error: "Forbidden" };
+  }
+
+  const market = await db.query.marketsTable.findFirst({
+    where: eq(marketsTable.id, params.id),
+  });
+
+  if (!market) {
+    set.status = 404;
+    return { error: "Market not found" };
+  }
+
+  if (market.status === "archived") {
+    const existingRefunds = await db
+      .select({
+        userId: marketRefundsTable.userId,
+        username: usersTable.username,
+        amount: marketRefundsTable.amount,
+      })
+      .from(marketRefundsTable)
+      .innerJoin(usersTable, eq(usersTable.id, marketRefundsTable.userId))
+      .where(eq(marketRefundsTable.marketId, params.id));
+
+    const refunds = existingRefunds.map((item) => ({
+      userId: item.userId,
+      username: item.username,
+      amount: Number(item.amount),
+    }));
+
+    return {
+      success: true,
+      marketId: params.id,
+      archived: true,
+      totalRefunded: Number(refunds.reduce((sum, item) => sum + item.amount, 0).toFixed(2)),
+      refunds,
+    };
+  }
+
+  if (market.status !== "active") {
+    set.status = 400;
+    return { error: "Only active markets can be archived" };
+  }
+
+  const refundsByUser = await db
+    .select({
+      userId: betsTable.userId,
+      username: usersTable.username,
+      amount: sql<number>`coalesce(sum(${betsTable.amount}), 0)`,
+    })
+    .from(betsTable)
+    .innerJoin(usersTable, eq(usersTable.id, betsTable.userId))
+    .where(eq(betsTable.marketId, params.id))
+    .groupBy(betsTable.userId, usersTable.username);
+
+  const refunds = refundsByUser.map((item) => ({
+    userId: item.userId,
+    username: item.username,
+    amount: Number(Number(item.amount ?? 0).toFixed(2)),
+  }));
+
+  await db.transaction(async (tx) => {
+    if (refunds.length > 0) {
+      await tx.insert(marketRefundsTable).values(
+        refunds.map((item) => ({
+          marketId: params.id,
+          userId: item.userId,
+          amount: item.amount,
+        })),
+      );
+
+      for (const item of refunds) {
+        await tx
+          .update(usersTable)
+          .set({ balance: sql`${usersTable.balance} + ${item.amount}` })
+          .where(eq(usersTable.id, item.userId));
+      }
+    }
+
+    await tx
+      .update(marketsTable)
+      .set({
+        status: "archived",
+        resolvedOutcomeId: null,
+      })
+      .where(eq(marketsTable.id, params.id));
+  });
+
+  return {
+    success: true,
+    marketId: params.id,
+    archived: true,
+    totalRefunded: Number(refunds.reduce((sum, item) => sum + item.amount, 0).toFixed(2)),
+    refunds,
   };
 }
 
@@ -512,6 +867,125 @@ export async function handleListMyBets({
       didWin,
     };
   });
+
+  return {
+    items,
+    pagination: {
+      page,
+      pageSize,
+      total,
+      totalPages,
+    },
+  };
+}
+
+export async function handleGetLeaderboard({
+  query,
+}: {
+  query: {
+    page?: number;
+    pageSize?: number;
+  };
+}) {
+  const page = Math.max(1, Number(query.page || 1));
+  const pageSize = Math.min(100, Math.max(1, Number(query.pageSize || 20)));
+
+  const rows = await db
+    .select({
+      userId: usersTable.id,
+      username: usersTable.username,
+      marketId: marketsTable.id,
+      resolvedOutcomeId: marketsTable.resolvedOutcomeId,
+      outcomeId: betsTable.outcomeId,
+      amount: betsTable.amount,
+    })
+    .from(betsTable)
+    .innerJoin(usersTable, eq(usersTable.id, betsTable.userId))
+    .innerJoin(marketsTable, eq(marketsTable.id, betsTable.marketId))
+    .where(eq(marketsTable.status, "resolved"));
+
+  const marketPools = new Map<number, { totalPool: number; winningPool: number }>();
+
+  for (const row of rows) {
+    const pool = marketPools.get(row.marketId) || { totalPool: 0, winningPool: 0 };
+    pool.totalPool += row.amount;
+    if (row.resolvedOutcomeId === row.outcomeId) {
+      pool.winningPool += row.amount;
+    }
+    marketPools.set(row.marketId, pool);
+  }
+
+  const statsByUser = new Map<
+    number,
+    {
+      userId: number;
+      username: string;
+      settledBets: number;
+      wins: number;
+      losses: number;
+      totalStaked: number;
+      totalPayout: number;
+    }
+  >();
+
+  for (const row of rows) {
+    const stats = statsByUser.get(row.userId) || {
+      userId: row.userId,
+      username: row.username,
+      settledBets: 0,
+      wins: 0,
+      losses: 0,
+      totalStaked: 0,
+      totalPayout: 0,
+    };
+
+    stats.settledBets += 1;
+    stats.totalStaked += row.amount;
+
+    if (row.resolvedOutcomeId === row.outcomeId) {
+      const pool = marketPools.get(row.marketId);
+      const payout = pool && pool.winningPool > 0 ? (row.amount * pool.totalPool) / pool.winningPool : 0;
+      stats.wins += 1;
+      stats.totalPayout += payout;
+    } else {
+      stats.losses += 1;
+    }
+
+    statsByUser.set(row.userId, stats);
+  }
+
+  const ranking = Array.from(statsByUser.values())
+    .map((stats) => {
+      const totalPayout = Number(stats.totalPayout.toFixed(2));
+      const totalStaked = Number(stats.totalStaked.toFixed(2));
+      return {
+        ...stats,
+        totalPayout,
+        totalStaked,
+        netProfit: Number((totalPayout - totalStaked).toFixed(2)),
+      };
+    })
+    .sort((a, b) => {
+      if (b.netProfit !== a.netProfit) return b.netProfit - a.netProfit;
+      if (b.wins !== a.wins) return b.wins - a.wins;
+      return a.username.localeCompare(b.username);
+    });
+
+  const total = ranking.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const offset = (page - 1) * pageSize;
+
+  const items = ranking.slice(offset, offset + pageSize).map((entry, index) => ({
+    rank: offset + index + 1,
+    userId: entry.userId,
+    username: entry.username,
+    settledBets: entry.settledBets,
+    wins: entry.wins,
+    losses: entry.losses,
+    totalStaked: entry.totalStaked,
+    totalPayout: entry.totalPayout,
+    netProfit: entry.netProfit,
+  }));
 
   return {
     items,

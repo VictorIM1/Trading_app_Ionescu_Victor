@@ -5,10 +5,11 @@ export interface Market {
   id: number;
   title: string;
   description?: string;
-  status: "active" | "resolved";
+  status: "active" | "resolved" | "archived";
   creator?: string;
   createdAt?: string;
   participantsCount: number;
+
   outcomes: MarketOutcome[];
   totalMarketBets: number;
 }
@@ -24,7 +25,7 @@ export interface MarketListResponse {
 }
 
 export interface ListMarketsParams {
-  status?: "all" | "active" | "resolved";
+  status?: "all" | "active" | "resolved" | "archived";
   sortBy?: "createdAt" | "totalBets" | "participants";
   sortOrder?: "asc" | "desc";
   page?: number;
@@ -40,12 +41,49 @@ export interface UserBet {
   amount: number;
   placedAt: string;
   currentOdds: number;
-  status: "active" | "resolved";
+  status: "active" | "resolved" | "archived";
   didWin: boolean | null;
 }
 
 export interface UserBetListResponse {
   items: UserBet[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
+export interface OddsHistoryPoint {
+  timestamp: string;
+  outcomes: Array<{
+    id: number;
+    title: string;
+    totalBets: number;
+    odds: number;
+  }>;
+}
+
+export interface OddsHistoryResponse {
+  marketId: number;
+  snapshots: OddsHistoryPoint[];
+}
+
+export interface LeaderboardEntry {
+  rank: number;
+  userId: number;
+  username: string;
+  settledBets: number;
+  wins: number;
+  losses: number;
+  totalStaked: number;
+  totalPayout: number;
+  netProfit: number;
+}
+
+export interface LeaderboardResponse {
+  items: LeaderboardEntry[];
   pagination: {
     page: number;
     pageSize: number;
@@ -65,7 +103,17 @@ export interface User {
   id: number;
   username: string;
   email: string;
+  role: "user" | "admin";
+  balance?: number;
   token: string;
+}
+
+export interface CurrentUser {
+  id: number;
+  username: string;
+  email: string;
+  role: "user" | "admin";
+  balance: number;
 }
 
 export interface Bet {
@@ -75,6 +123,31 @@ export interface Bet {
   outcomeId: number;
   amount: number;
   createdAt: string;
+}
+
+export interface ResolveMarketResponse {
+  success: boolean;
+  marketId: number;
+  resolvedOutcomeId: number;
+  totalPool: number;
+  winningPool: number;
+  totalPayout: number;
+  payouts: Array<{
+    userId: number;
+    amount: number;
+  }>;
+}
+
+export interface ArchiveMarketResponse {
+  success: boolean;
+  marketId: number;
+  archived: boolean;
+  totalRefunded: number;
+  refunds: Array<{
+    userId: number;
+    username: string;
+    amount: number;
+  }>;
 }
 
 // API Client
@@ -87,17 +160,19 @@ class ApiClient {
 
   private getAuthHeader() {
     const token = localStorage.getItem("auth_token");
-    if (!token) return {};
-    return { Authorization: `Bearer ${token}` };
+    if (!token) return null;
+    return `Bearer ${token}`;
   }
 
   private async request(endpoint: string, options: RequestInit = {}): Promise<any> {
     const url = `${this.baseUrl}${endpoint}`;
-    const headers = {
-      "Content-Type": "application/json",
-      ...this.getAuthHeader(),
-      ...options.headers,
-    };
+    const headers = new Headers(options.headers);
+    headers.set("Content-Type", "application/json");
+
+    const authHeader = this.getAuthHeader();
+    if (authHeader) {
+      headers.set("Authorization", authHeader);
+    }
 
     const response = await fetch(url, {
       ...options,
@@ -133,6 +208,10 @@ class ApiClient {
     });
   }
 
+  async getCurrentUser(): Promise<CurrentUser> {
+    return this.request("/api/users/me");
+  }
+
   // Markets endpoints
   async listMarkets(params: ListMarketsParams = {}): Promise<MarketListResponse> {
     const search = new URLSearchParams();
@@ -153,6 +232,10 @@ class ApiClient {
     return this.request(`/api/markets/${id}`);
   }
 
+  async getMarketOddsHistory(id: number): Promise<OddsHistoryResponse> {
+    return this.request(`/api/markets/${id}/odds-history`);
+  }
+
   async createMarket(title: string, description: string, outcomes: string[]): Promise<Market> {
     return this.request("/api/markets", {
       method: "POST",
@@ -168,6 +251,19 @@ class ApiClient {
     });
   }
 
+  async resolveMarket(marketId: number, outcomeId: number): Promise<ResolveMarketResponse> {
+    return this.request(`/api/markets/${marketId}/resolve`, {
+      method: "POST",
+      body: JSON.stringify({ outcomeId }),
+    });
+  }
+
+  async archiveMarket(marketId: number): Promise<ArchiveMarketResponse> {
+    return this.request(`/api/markets/${marketId}/archive`, {
+      method: "POST",
+    });
+  }
+
   async listMyBets(
     status: "active" | "resolved",
     page = 1,
@@ -180,6 +276,15 @@ class ApiClient {
     });
 
     return this.request(`/api/users/me/bets?${query.toString()}`);
+  }
+
+  async getLeaderboard(page = 1, pageSize = 20): Promise<LeaderboardResponse> {
+    const query = new URLSearchParams({
+      page: String(page),
+      pageSize: String(pageSize),
+    });
+
+    return this.request(`/api/users/leaderboard?${query.toString()}`);
   }
 }
 

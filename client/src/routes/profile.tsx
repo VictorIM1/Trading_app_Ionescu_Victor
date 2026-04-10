@@ -106,7 +106,7 @@ function BetSection({
 }
 
 function ProfilePage() {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, updateUser } = useAuth();
   const navigate = useNavigate();
 
   const [activePage, setActivePage] = useState(1);
@@ -167,6 +167,23 @@ function ProfilePage() {
     return () => clearInterval(intervalId);
   }, [isAuthenticated, loadActiveBets]);
 
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const refreshMe = async () => {
+      try {
+        const currentUser = await api.getCurrentUser();
+        updateUser(currentUser);
+      } catch {
+        // Keep profile usable even if balance refresh fails temporarily.
+      }
+    };
+
+    refreshMe();
+    const intervalId = setInterval(refreshMe, 5000);
+    return () => clearInterval(intervalId);
+  }, [isAuthenticated, updateUser]);
+
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -187,6 +204,7 @@ function ProfilePage() {
           <div>
             <h1 className="text-4xl font-bold text-gray-900">{user?.username}'s Profile</h1>
             <p className="mt-2 text-gray-600">Track resolved and active bets in one place.</p>
+            <p className="mt-1 text-sm text-gray-700">Current balance: ${Number(user?.balance ?? 0).toFixed(2)}</p>
           </div>
           <div className="flex gap-3">
             <Button variant="outline" onClick={() => navigate({ to: "/" })}>
