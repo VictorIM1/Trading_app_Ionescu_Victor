@@ -182,6 +182,12 @@ class ApiClient {
     const data = await response.json();
 
     if (!response.ok) {
+      if (response.status === 401 && typeof window !== "undefined") {
+        localStorage.removeItem("auth_token");
+        localStorage.removeItem("auth_user");
+        window.dispatchEvent(new Event("auth-expired"));
+      }
+
       // If there are validation errors, throw them
       if (data.errors && Array.isArray(data.errors)) {
         const errorMessage = data.errors.map((e: any) => `${e.field}: ${e.message}`).join(", ");

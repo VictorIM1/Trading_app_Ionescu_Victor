@@ -1,4 +1,4 @@
-# Prediction Market App (Themeisle Internship 2026)
+# Prediction Market App
 
 This repository contains a full-stack prediction market web application built from the provided starter and extended to cover the requested product tasks.
 

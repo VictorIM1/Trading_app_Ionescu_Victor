@@ -20,7 +20,8 @@ function OddsHistoryChart({ snapshots }: { snapshots: OddsHistoryPoint[] }) {
       return { lines: [], labels: [] as string[] };
     }
 
-    const width = 100;
+    const plotOffsetX = 12;
+    const plotWidth = 88;
     const height = 100;
     const steps = Math.max(1, snapshots.length - 1);
 
@@ -28,7 +29,7 @@ function OddsHistoryChart({ snapshots }: { snapshots: OddsHistoryPoint[] }) {
       const points = snapshots.map((snapshot, snapshotIndex) => {
         const outcomeSnapshot = snapshot.outcomes.find((item) => item.id === outcome.id);
         const odds = outcomeSnapshot?.odds ?? 0;
-        const x = (snapshotIndex / steps) * width;
+        const x = plotOffsetX + (snapshotIndex / steps) * plotWidth;
         const y = height - (odds / 100) * height;
         return `${x},${y}`;
       });
@@ -58,13 +59,13 @@ function OddsHistoryChart({ snapshots }: { snapshots: OddsHistoryPoint[] }) {
 
   return (
     <div className="space-y-3">
-      <svg viewBox="0 0 100 100" className="h-56 w-full rounded-md border bg-white">
+      <svg viewBox="0 0 100 100" className="h-56 w-full rounded-md border border-border/70 bg-background">
         {[0, 25, 50, 75, 100].map((tick) => {
           const y = 100 - tick;
           return (
             <g key={tick}>
-              <line x1="0" y1={y} x2="100" y2={y} stroke="#E2E8F0" strokeWidth="0.4" />
-              <text x="1" y={y - 1.5} fontSize="2.8" fill="#64748B">
+              <line x1="12" y1={y} x2="100" y2={y} stroke="#64748B" strokeOpacity="0.35" strokeWidth="0.4" />
+              <text x="1.5" y={Math.max(4, y - 1)} fontSize="4.4" fill="#E2E8F0" fontWeight="700">
                 {tick}%
               </text>
             </g>
@@ -90,9 +91,12 @@ function OddsHistoryChart({ snapshots }: { snapshots: OddsHistoryPoint[] }) {
 
       <div className="flex flex-wrap gap-3">
         {chartData.lines.map((line) => (
-          <div key={line.id} className="inline-flex items-center gap-2 rounded-md border bg-white px-2 py-1 text-xs">
+          <div
+            key={line.id}
+            className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground"
+          >
             <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: line.color }} />
-            <span>{line.title}</span>
+            <span className="font-medium">{line.title}</span>
           </div>
         ))}
       </div>
@@ -291,7 +295,7 @@ function MarketDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-zinc-950 via-slate-900 to-zinc-900 py-8">
       <div className="max-w-3xl mx-auto px-4 space-y-6">
         {/* Header */}
         <Button variant="outline" onClick={() => navigate({ to: "/" })}>
@@ -369,14 +373,14 @@ function MarketDetailPage() {
             {/* Betting Section */}
             {market.status === "active" && (
               <div className="grid gap-4 md:grid-cols-2">
-                <Card className="bg-secondary/5">
+                <Card className="border border-border/80 bg-card/80 backdrop-blur-sm">
                   <CardHeader>
                     <CardTitle>Place Your Bet</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="space-y-2">
                       <Label>Selected Outcome</Label>
-                      <div className="p-3 bg-white border border-secondary rounded-md">
+                      <div className="rounded-md border border-border bg-background p-3 text-foreground">
                         {market.outcomes.find((o) => o.id === selectedOutcomeId)?.title ||
                           "None selected"}
                       </div>
@@ -392,6 +396,7 @@ function MarketDetailPage() {
                         value={betAmount}
                         onChange={(e) => setBetAmount(e.target.value)}
                         placeholder="Enter amount"
+                        className="bg-background text-foreground placeholder:text-zinc-400"
                         disabled={isBetting}
                       />
                       {betValidationError && (
@@ -426,7 +431,7 @@ function MarketDetailPage() {
                         <Label htmlFor="resolveOutcome">Winning Outcome</Label>
                         <select
                           id="resolveOutcome"
-                          className="w-full rounded-md border bg-white px-3 py-2 text-sm"
+                          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
                           value={resolveOutcomeId ?? ""}
                           onChange={(e) => setResolveOutcomeId(Number(e.target.value))}
                           disabled={isResolving}

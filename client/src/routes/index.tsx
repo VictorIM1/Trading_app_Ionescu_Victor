@@ -115,16 +115,16 @@ function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+    <div className="min-h-screen bg-gradient-to-br from-zinc-950 via-slate-900 to-zinc-900">
       <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-4xl font-bold text-gray-900">Markets</h1>
-            <p className="text-gray-600 mt-2">Welcome back, {user?.username}!</p>
-            <p className="mt-1 text-sm text-gray-700">Balance: ${Number(user?.balance ?? 0).toFixed(2)}</p>
+            <h1 className="text-4xl font-bold text-zinc-100">Markets</h1>
+            <p className="mt-2 text-zinc-300">Welcome back, {user?.username}!</p>
+            <p className="mt-1 text-sm text-zinc-200">Balance: ${Number(user?.balance ?? 0).toFixed(2)}</p>
             {user?.role === "admin" && (
-              <p className="mt-1 text-sm font-medium text-amber-700">Admin mode: market resolution controls enabled.</p>
+              <p className="mt-1 text-sm font-medium text-amber-300">Admin mode: market resolution controls enabled.</p>
             )}
           </div>
           <div className="flex items-center gap-4">
@@ -142,12 +142,12 @@ function DashboardPage() {
         </div>
 
         {/* Controls */}
-        <div className="mb-6 rounded-lg border bg-white/80 p-4">
+        <div className="mb-6 rounded-lg border border-border/80 bg-card/80 p-4 backdrop-blur-sm">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-            <label className="text-sm font-medium text-gray-700">
+            <label className="text-sm font-medium text-zinc-200">
               Status
               <select
-                className="mt-1 w-full rounded-md border bg-white px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
                 value={status}
                 onChange={(e) => {
                   setStatus(e.target.value as "all" | "active" | "resolved" | "archived");
@@ -161,10 +161,10 @@ function DashboardPage() {
               </select>
             </label>
 
-            <label className="text-sm font-medium text-gray-700">
+            <label className="text-sm font-medium text-zinc-200">
               Sort By
               <select
-                className="mt-1 w-full rounded-md border bg-white px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
                 value={sortBy}
                 onChange={(e) => {
                   setSortBy(e.target.value as "createdAt" | "totalBets" | "participants");
@@ -177,10 +177,10 @@ function DashboardPage() {
               </select>
             </label>
 
-            <label className="text-sm font-medium text-gray-700">
+            <label className="text-sm font-medium text-zinc-200">
               Order
               <select
-                className="mt-1 w-full rounded-md border bg-white px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
                 value={sortOrder}
                 onChange={(e) => {
                   setSortOrder(e.target.value as "asc" | "desc");
@@ -199,7 +199,7 @@ function DashboardPage() {
             </div>
           </div>
 
-          <p className="mt-3 text-xs text-gray-500">Live market odds and totals update automatically every 5 seconds.</p>
+          <p className="mt-3 text-xs text-zinc-400">Live market odds and totals update automatically every 5 seconds.</p>
         </div>
 
         {/* Error State */}
@@ -228,7 +228,7 @@ function DashboardPage() {
           </Card>
         ) : (
           <>
-            <div className="mb-4 text-sm text-gray-600">
+            <div className="mb-4 text-sm text-zinc-300">
               Showing {showingFrom}-{showingTo} of {pagination.total} markets
             </div>
 
@@ -238,7 +238,7 @@ function DashboardPage() {
               ))}
             </div>
 
-            <div className="mt-6 flex items-center justify-between rounded-lg border bg-white/80 p-4">
+            <div className="mt-6 flex items-center justify-between rounded-lg border border-border/80 bg-card/80 p-4 backdrop-blur-sm">
               <Button
                 variant="outline"
                 disabled={pagination.page <= 1 || isLoading}
@@ -247,7 +247,7 @@ function DashboardPage() {
                 Previous
               </Button>
 
-              <span className="text-sm text-gray-600">
+              <span className="text-sm text-zinc-300">
                 Page {pagination.page} of {pagination.totalPages}
               </span>
 

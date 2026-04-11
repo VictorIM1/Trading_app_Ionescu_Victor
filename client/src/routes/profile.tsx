@@ -126,7 +126,9 @@ function ProfilePage() {
         const data = await api.listMyBets("active", activePage, PAGE_SIZE);
         setActiveData(data);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load active bets");
+        const message = err instanceof Error ? err.message : "Failed to load active bets";
+        if (message.toLowerCase().includes("unauthorized")) return;
+        setError(message);
       } finally {
         if (showLoading) setIsLoadingActive(false);
       }
@@ -140,7 +142,9 @@ function ProfilePage() {
       const data = await api.listMyBets("resolved", resolvedPage, PAGE_SIZE);
       setResolvedData(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load resolved bets");
+      const message = err instanceof Error ? err.message : "Failed to load resolved bets";
+      if (message.toLowerCase().includes("unauthorized")) return;
+      setError(message);
     } finally {
       setIsLoadingResolved(false);
     }
@@ -180,13 +184,12 @@ function ProfilePage() {
     };
 
     refreshMe();
-    const intervalId = setInterval(refreshMe, 5000);
-    return () => clearInterval(intervalId);
+    return;
   }, [isAuthenticated, updateUser]);
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-zinc-950 via-slate-900 to-zinc-900">
         <Card>
           <CardContent className="py-10 text-center">
             <p className="mb-4 text-muted-foreground">Please log in to view your profile.</p>
@@ -198,13 +201,13 @@ function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+    <div className="min-h-screen bg-gradient-to-br from-zinc-950 via-slate-900 to-zinc-900">
       <div className="mx-auto max-w-6xl px-4 py-8">
         <div className="mb-8 flex items-center justify-between">
           <div>
-            <h1 className="text-4xl font-bold text-gray-900">{user?.username}'s Profile</h1>
-            <p className="mt-2 text-gray-600">Track resolved and active bets in one place.</p>
-            <p className="mt-1 text-sm text-gray-700">Current balance: ${Number(user?.balance ?? 0).toFixed(2)}</p>
+            <h1 className="text-4xl font-bold text-zinc-100">{user?.username}'s Profile</h1>
+            <p className="mt-2 text-zinc-300">Track resolved and active bets in one place.</p>
+            <p className="mt-1 text-sm text-zinc-200">Current balance: ${Number(user?.balance ?? 0).toFixed(2)}</p>
           </div>
           <div className="flex gap-3">
             <Button variant="outline" onClick={() => navigate({ to: "/" })}>
