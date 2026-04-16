@@ -1,40 +1,109 @@
 # Prediction Market App
 
-This repository contains a full-stack prediction market web application built from the provided starter and extended to cover the requested product tasks.
+This is a full-stack prediction market app built on Bun, SQLite, React 19, and TanStack Router.
 
-## What The Project Is Today
+## Preview
 
-The app supports:
-- User registration and login with JWT authentication
-- Market creation and betting
-- Live market odds updates (polling every few seconds)
-- Dashboard filtering, sorting, and pagination
-- Profile page with active and resolved bets
-- Market detail odds chart and bet placement flow
-- Leaderboard by net profit from resolved markets
-- Admin role and admin-only market controls
-- Market resolution with proportional payout distribution
-- Market archive flow with full bettor refunds
-- User balance tracking (deduct on bet, credit on payout/refund)
+### Screenshot
+
+![Admin market resolution view](assets/Admin_resolve_bet.jpeg)
+
+### Demo Video
+
+[Watch demo video](assets/demo.mkv)
+
+## What It Does
+
+Users can register, log in, browse markets, place bets, resolve markets as admins, and track balances and payouts. The app also supports bot access through API keys generated from the profile page.
+
+## Implemented Tasks
+
+### 1. Main Dashboard
+- Shows all active markets with title, outcomes, current odds, and total bet amount.
+- Supports sorting by creation date, total bet size, or number of participants.
+- Supports filtering by market status.
+- Shows 20 markets per page with next/previous navigation.
+- Refreshes odds and totals automatically every few seconds.
+
+### 2. User Profile Page
+- Shows active bets with live current odds.
+- Shows resolved bets with market title, selected outcome, and win/loss state.
+- Paginates active and resolved lists separately, 20 items per page.
+- Includes an API key section for bot usage.
+
+### 3. Market Detail Page
+- Shows a chart of bet distribution by outcome.
+- Shows current odds for each outcome.
+- Lets users select an outcome and place a bet.
+- Validates that bet amounts are positive.
+- Refreshes active market data automatically.
+
+### 4. Leaderboard
+- Ranks users by total winnings in descending order.
+- Shows each user’s name and total winnings.
+- Is paginated.
+
+### 5. Role System
+- Supports `user` and `admin` roles.
+- The first account becomes admin automatically if no admin exists.
+- Admin controls are only shown to admins.
+
+### 6. Admin Market Resolution
+- Admins can resolve a market by selecting the winning outcome.
+- Admins can archive a market.
+- Admin access is required.
+
+### 7. Payout Distribution
+- Winners are the bets that match the resolved outcome.
+- The total pool is distributed proportionally by stake.
+- Payouts are stored and user balances are updated.
+
+### 8. User Balance Tracking
+- Users start with a balance of 1000.
+- Bet amounts are deducted when placed.
+- Winnings are added when markets resolve.
+- Refunds are added when markets are archived.
+
+## Bonus Task: API Keys For Bots
+
+This is implemented.
+
+Users can generate an API key from the Profile page and use it to access the same authenticated endpoints as the frontend.
+
+Supported with `x-api-key`:
+- Create markets
+- List markets
+- Place bets
+- View outcomes and market details
+- Access current user data and bet lists
+
+API key lifecycle:
+- Generate a key from Profile
+- Show the key once
+- Revoke or regenerate later
+- Store only hashed keys on the server
 
 ## Tech Stack
 
 ### Backend
-- Bun + Elysia
-- SQLite with Drizzle ORM
-- JWT auth middleware
+- Bun
+- Elysia
+- SQLite
+- Drizzle ORM
+- JWT auth plus API-key auth
 
 ### Frontend
-- React 19 + TanStack Router (file-based routes)
-- Tailwind CSS + shadcn UI primitives
-- API access through same-origin proxy routes under client-side `/api/*`
+- React 19
+- TanStack Router
+- Tailwind CSS
+- shadcn/ui-style components
 
 ### Runtime
-- Docker Compose (recommended)
+- Docker Compose
 
-## Quick Start
+## Running the App
 
-### 1. Run with Docker Compose
+### With Docker Compose
 
 ```bash
 docker compose up --build
@@ -44,139 +113,25 @@ Services:
 - Frontend: `http://localhost:3005`
 - Backend: `http://localhost:4005`
 
-### 2. Local development without Docker (optional)
+### Local Development
+
+Backend:
 
 ```bash
-# backend
 cd server
 bun install
 bun run dev
+```
 
-# frontend
+Frontend:
+
+```bash
 cd client
 bun install
 bun run dev
 ```
 
-## Implemented Requirements (Tasks 1-8)
-
-## 1. Main Dashboard
-Implemented:
-- Displays markets with title, outcomes, odds, and total market value
-- Sort by creation date, total bets, and participants
-- Filter by status (`active`, `resolved`, `archived`, `all`)
-- Pagination at 20 items per page
-- Auto-refresh for near real-time odds/totals
-
-Main files:
-- `client/src/routes/index.tsx`
-- `client/src/components/market-card.tsx`
-- `server/src/api/handlers.ts` (`handleListMarkets`)
-- `server/src/api/markets.routes.ts`
-
-## 2. User Profile Page
-Implemented:
-- Separate sections for active bets and resolved bets
-- Resolved section shows win/loss state
-- Active section shows current live odds
-- Independent pagination for each section (20/page)
-- Periodic refresh for active data and current balance
-
-Main files:
-- `client/src/routes/profile.tsx`
-- `server/src/api/handlers.ts` (`handleListMyBets`)
-- `server/src/api/users.routes.ts`
-
-## 3. Market Detail Page
-Implemented:
-- Market odds and totals per outcome
-- Odds history chart rendered from API snapshots
-- Outcome selection + amount input for betting
-- Positive-number validation before submit
-- Estimated payout preview
-- Live refresh while market is active
-
-Main files:
-- `client/src/routes/markets/$id.tsx`
-- `server/src/api/handlers.ts` (`handleGetMarket`, `handleGetMarketOddsHistory`, `handlePlaceBet`)
-- `server/src/api/markets.routes.ts`
-
-## 4. Leaderboard
-Implemented:
-- Leaderboard endpoint and page
-- Ranking by net profit over resolved markets
-- Shows user stats and totals
-- Pagination at 20/page
-
-Main files:
-- `client/src/routes/leaderboard.tsx`
-- `client/src/routes/api/users/leaderboard.tsx`
-- `server/src/api/handlers.ts` (`handleGetLeaderboard`)
-- `server/src/api/users.routes.ts`
-
-## 5. Role System
-Implemented:
-- `user` / `admin` role support
-- First account elevated to admin (with startup safety fallback if no admin exists)
-- Role included in auth responses and client auth state
-- Admin-only controls shown in UI where applicable
-
-Main files:
-- `server/src/db/schema.ts`
-- `server/src/api/handlers.ts` (`handleRegister`, `handleLogin`)
-- `server/docker-entrypoint.sh`
-- `client/src/lib/auth-context.tsx`
-- `client/src/routes/index.tsx`
-- `client/src/routes/markets/$id.tsx`
-
-## 6. Admin Market Resolution
-Implemented:
-- Admin can resolve market by selecting winning outcome
-- Admin can archive active market
-- Archive action performs full refunds to bettors
-- Access protected by admin role checks
-
-Main files:
-- `server/src/api/handlers.ts` (`handleResolveMarket`, `handleArchiveMarket`)
-- `server/src/api/markets.routes.ts`
-- `server/src/db/schema.ts` (`market_refunds`)
-- `client/src/routes/markets/$id.tsx`
-- `client/src/routes/api/markets/$id/resolve.tsx`
-- `client/src/routes/api/markets/$id/archive.tsx`
-
-## 7. Payout Distribution
-Implemented:
-- On resolve, winners are identified by matching resolved outcome
-- Total pool distributed proportionally by winner stake
-- Payout records stored
-- Winner balances credited transactionally
-
-Main files:
-- `server/src/api/handlers.ts` (`handleResolveMarket`)
-- `server/src/db/schema.ts` (`market_payouts`)
-- `server/docker-entrypoint.sh`
-
-## 8. User Balance Tracking
-Implemented:
-- Users have balance (default initial value: 1000)
-- Bet placement deducts balance
-- Resolve payouts add to balance
-- Archive refunds add to balance
-- Auth/profile/dashboard/market views refresh and show current balance
-- Added `/api/users/me` endpoint for current user state
-
-Main files:
-- `server/src/db/schema.ts` (`users.balance`)
-- `server/src/api/handlers.ts` (`handlePlaceBet`, `handleResolveMarket`, `handleArchiveMarket`, `handleGetCurrentUser`)
-- `server/src/api/users.routes.ts`
-- `client/src/lib/api.ts`
-- `client/src/lib/auth-context.tsx`
-- `client/src/routes/index.tsx`
-- `client/src/routes/profile.tsx`
-- `client/src/routes/markets/$id.tsx`
-- `client/src/routes/api/users/me.tsx`
-
-## API Highlights
+## Main API Endpoints
 
 Auth:
 - `POST /api/auth/register`
@@ -188,36 +143,41 @@ Markets:
 - `GET /api/markets/:id/odds-history`
 - `POST /api/markets`
 - `POST /api/markets/:id/bets`
-- `POST /api/markets/:id/resolve` (admin)
-- `POST /api/markets/:id/archive` (admin)
+- `POST /api/markets/:id/resolve`
+- `POST /api/markets/:id/archive`
 
 Users:
 - `GET /api/users/me`
 - `GET /api/users/me/bets`
 - `GET /api/users/leaderboard`
 
-## Tests and Validation
+API key management:
+- `GET /api/users/me/api-key`
+- `POST /api/users/me/api-key`
+- `DELETE /api/users/me/api-key`
 
-Backend test coverage includes:
-- Auth flows and validation
-- Market creation/list/detail
-- Betting validation
-- Admin role restrictions
-- Resolve/archive behavior
-- Payout and refund calculations
-- Balance lifecycle checks
+## Validation
+
+Backend coverage includes:
+- Auth flows
+- Market creation and listing
+- Betting and validation
+- Role restrictions
+- Market resolution and archival
+- Payout and refund distribution
+- Balance updates
+- API key generation and revocation
+- API-key-authenticated requests
 
 Primary test file:
 - `server/test/api.test.ts`
 
 ## Notes
 
-- Real-time behavior is currently implemented with short-interval polling.
-- Bonus API-key feature is not implemented in this iteration.
-- If you see a local editor-only TS warning around `import.meta.env`, runtime/container builds remain functional.
+- Real-time updates are implemented with short-interval polling.
+- API keys are intended for bot access and should be treated like passwords.
+- If you see the old `import.meta.env` editor warning, the app still runs correctly in the container and browser.
 
-## Submission Artifacts
+## Submission
 
-See:
-- `submission/README.md`
-- `assets/` for visuals used during development/demo
+See `submission/README.md` for submission-specific notes.

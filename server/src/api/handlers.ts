@@ -8,7 +8,12 @@ import {
   marketRefundsTable,
   marketPayoutsTable,
 } from "../db/schema";
-import { hashPassword, verifyPassword, type AuthTokenPayload } from "../lib/auth";
+import {
+  generateApiKeyBundle,
+  hashPassword,
+  verifyPassword,
+  type AuthTokenPayload,
+} from "../lib/auth";
 import {
   validateRegistration,
   validateLogin,
@@ -132,6 +137,70 @@ export async function handleGetCurrentUser({
     email: user.email,
     role: user.role,
     balance: Number(user.balance),
+  };
+}
+
+export async function handleGetMyApiKey({
+  user,
+}: {
+  user: typeof usersTable.$inferSelect;
+}) {
+  const hasApiKey = Boolean(user.apiKeyHash && !user.apiKeyRevokedAt);
+
+  return {
+    hasApiKey,
+    keyId: hasApiKey ? user.apiKeyId : null,
+    createdAt: user.apiKeyCreatedAt,
+    lastUsedAt: user.apiKeyLastUsedAt,
+  };
+}
+
+export async function handleGenerateMyApiKey({
+  user,
+}: {
+  user: typeof usersTable.$inferSelect;
+}) {
+  const { apiKey, apiKeyHash, apiKeyId } = await generateApiKeyBundle();
+  const now = new Date();
+
+  await db
+    .update(usersTable)
+    .set({
+      apiKeyId,
+      apiKeyHash,
+      apiKeyCreatedAt: now,
+      apiKeyLastUsedAt: null,
+      apiKeyRevokedAt: null,
+    })
+    .where(eq(usersTable.id, user.id));
+
+  return {
+    apiKey,
+    keyId: apiKeyId,
+    createdAt: now,
+    lastUsedAt: null,
+  };
+}
+
+export async function handleRevokeMyApiKey({
+  user,
+}: {
+  user: typeof usersTable.$inferSelect;
+}) {
+  const now = new Date();
+
+  await db
+    .update(usersTable)
+    .set({
+      apiKeyId: null,
+      apiKeyHash: null,
+      apiKeyRevokedAt: now,
+    })
+    .where(eq(usersTable.id, user.id));
+
+  return {
+    success: true,
+    revokedAt: now,
   };
 }
 
@@ -961,12 +1030,13 @@ export async function handleGetLeaderboard({
       return {
         ...stats,
         totalPayout,
+        totalWinnings: totalPayout,
         totalStaked,
         netProfit: Number((totalPayout - totalStaked).toFixed(2)),
       };
     })
     .sort((a, b) => {
-      if (b.netProfit !== a.netProfit) return b.netProfit - a.netProfit;
+      if (b.totalWinnings !== a.totalWinnings) return b.totalWinnings - a.totalWinnings;
       if (b.wins !== a.wins) return b.wins - a.wins;
       return a.username.localeCompare(b.username);
     });
@@ -982,6 +1052,7 @@ export async function handleGetLeaderboard({
     settledBets: entry.settledBets,
     wins: entry.wins,
     losses: entry.losses,
+    totalWinnings: entry.totalWinnings,
     totalStaked: entry.totalStaked,
     totalPayout: entry.totalPayout,
     netProfit: entry.netProfit,

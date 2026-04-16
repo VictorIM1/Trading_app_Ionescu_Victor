@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/lib/auth-context";
-import { api, UserBet, UserBetListResponse } from "@/lib/api";
+import { api, ApiKeyInfoResponse, UserBet, UserBetListResponse } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -15,6 +15,13 @@ const emptyResponse: UserBetListResponse = {
     total: 0,
     totalPages: 1,
   },
+};
+
+const emptyApiKeyState: ApiKeyInfoResponse = {
+  hasApiKey: false,
+  keyId: null,
+  createdAt: null,
+  lastUsedAt: null,
 };
 
 function BetRow({ bet, isResolved }: { bet: UserBet; isResolved: boolean }) {
@@ -117,6 +124,12 @@ function ProfilePage() {
 
   const [isLoadingActive, setIsLoadingActive] = useState(true);
   const [isLoadingResolved, setIsLoadingResolved] = useState(true);
+  const [isLoadingApiKey, setIsLoadingApiKey] = useState(true);
+  const [isGeneratingApiKey, setIsGeneratingApiKey] = useState(false);
+  const [isRevokingApiKey, setIsRevokingApiKey] = useState(false);
+  const [apiKeyInfo, setApiKeyInfo] = useState<ApiKeyInfoResponse>(emptyApiKeyState);
+  const [generatedApiKey, setGeneratedApiKey] = useState<string | null>(null);
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
   const [error, setError] = useState<string | null>(null);
 
   const loadActiveBets = useCallback(
@@ -150,6 +163,20 @@ function ProfilePage() {
     }
   }, [resolvedPage]);
 
+  const loadApiKeyInfo = useCallback(async () => {
+    try {
+      setIsLoadingApiKey(true);
+      const data = await api.getMyApiKey();
+      setApiKeyInfo(data);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to load API key info";
+      if (message.toLowerCase().includes("unauthorized")) return;
+      setError(message);
+    } finally {
+      setIsLoadingApiKey(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (!isAuthenticated) return;
     setError(null);
@@ -160,6 +187,11 @@ function ProfilePage() {
     if (!isAuthenticated) return;
     loadResolvedBets();
   }, [isAuthenticated, loadResolvedBets]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    loadApiKeyInfo();
+  }, [isAuthenticated, loadApiKeyInfo]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -186,6 +218,52 @@ function ProfilePage() {
     refreshMe();
     return;
   }, [isAuthenticated, updateUser]);
+
+  const handleGenerateApiKey = async () => {
+    try {
+      setIsGeneratingApiKey(true);
+      setCopyStatus("idle");
+      const data = await api.generateMyApiKey();
+      setGeneratedApiKey(data.apiKey);
+      setApiKeyInfo({
+        hasApiKey: true,
+        keyId: data.keyId,
+        createdAt: data.createdAt,
+        lastUsedAt: data.lastUsedAt,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to generate API key");
+    } finally {
+      setIsGeneratingApiKey(false);
+    }
+  };
+
+  const handleRevokeApiKey = async () => {
+    try {
+      setIsRevokingApiKey(true);
+      setCopyStatus("idle");
+      await api.revokeMyApiKey();
+      setGeneratedApiKey(null);
+      setApiKeyInfo(emptyApiKeyState);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to revoke API key");
+    } finally {
+      setIsRevokingApiKey(false);
+    }
+  };
+
+  const handleCopyApiKey = async () => {
+    if (!generatedApiKey) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(generatedApiKey);
+      setCopyStatus("copied");
+    } catch {
+      setCopyStatus("failed");
+    }
+  };
 
   if (!isAuthenticated) {
     return (
@@ -247,6 +325,84 @@ function ProfilePage() {
               setResolvedPage((p) => Math.min(resolvedData.pagination.totalPages, p + 1))
             }
           />
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Bot API Key</CardTitle>
+              <CardDescription>
+                Use this key with the x-api-key header to place bets and call authenticated endpoints programmatically.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {isLoadingApiKey ? (
+                <p className="text-sm text-muted-foreground">Loading API key status...</p>
+              ) : (
+                <>
+                  <div className="rounded-md border bg-background p-4 text-sm">
+                    <p className="text-foreground">
+                      Status: {apiKeyInfo.hasApiKey ? "Active" : "Not generated"}
+                    </p>
+                    {apiKeyInfo.keyId && (
+                      <p className="mt-1 text-muted-foreground">Key ID: {apiKeyInfo.keyId}</p>
+                    )}
+                    {apiKeyInfo.createdAt && (
+                      <p className="mt-1 text-muted-foreground">
+                        Created: {new Date(apiKeyInfo.createdAt).toLocaleString()}
+                      </p>
+                    )}
+                    {apiKeyInfo.lastUsedAt && (
+                      <p className="mt-1 text-muted-foreground">
+                        Last used: {new Date(apiKeyInfo.lastUsedAt).toLocaleString()}
+                      </p>
+                    )}
+                  </div>
+
+                  {generatedApiKey && (
+                    <div className="rounded-md border border-amber-300/40 bg-amber-50/10 p-4">
+                      <p className="text-sm font-medium text-amber-200">
+                        Save this key now. For security, you will not be able to view it again.
+                      </p>
+                      <p className="mt-2 break-all rounded-md bg-background px-3 py-2 font-mono text-xs text-foreground">
+                        {generatedApiKey}
+                      </p>
+                      <div className="mt-3 flex items-center gap-3">
+                        <Button variant="outline" onClick={handleCopyApiKey}>
+                          Copy key
+                        </Button>
+                        {copyStatus === "copied" && (
+                          <span className="text-xs text-emerald-300">Copied to clipboard.</span>
+                        )}
+                        {copyStatus === "failed" && (
+                          <span className="text-xs text-destructive">Copy failed. Please copy manually.</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap gap-3">
+                    <Button
+                      onClick={handleGenerateApiKey}
+                      disabled={isGeneratingApiKey || isRevokingApiKey}
+                    >
+                      {isGeneratingApiKey
+                        ? "Generating..."
+                        : apiKeyInfo.hasApiKey
+                          ? "Regenerate API Key"
+                          : "Generate API Key"}
+                    </Button>
+
+                    <Button
+                      variant="outline"
+                      onClick={handleRevokeApiKey}
+                      disabled={!apiKeyInfo.hasApiKey || isRevokingApiKey || isGeneratingApiKey}
+                    >
+                      {isRevokingApiKey ? "Revoking..." : "Revoke API Key"}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>

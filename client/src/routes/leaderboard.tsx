@@ -58,7 +58,7 @@ function LeaderboardPage() {
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-zinc-950 via-slate-900 to-zinc-900">
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-10 gap-4">
             <p className="text-muted-foreground">Please log in to view the leaderboard.</p>
@@ -70,12 +70,12 @@ function LeaderboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-zinc-950 via-slate-900 to-zinc-900 py-8">
       <div className="mx-auto max-w-5xl space-y-6 px-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-4xl font-bold text-gray-900">Leaderboard</h1>
-            <p className="mt-2 text-sm text-gray-600">Ranking based on net profit from resolved markets.</p>
+            <h1 className="text-4xl font-bold text-zinc-100">Leaderboard</h1>
+            <p className="mt-2 text-sm text-zinc-300">Ranking by total winnings from resolved markets.</p>
           </div>
           <div className="flex gap-3">
             <Button variant="outline" onClick={() => navigate({ to: "/" })}>
@@ -110,6 +110,7 @@ function LeaderboardPage() {
                       <tr className="border-b text-left text-muted-foreground">
                         <th className="px-2 py-2">Rank</th>
                         <th className="px-2 py-2">User</th>
+                        <th className="px-2 py-2">Total Winnings</th>
                         <th className="px-2 py-2">Settled Bets</th>
                         <th className="px-2 py-2">Wins</th>
                         <th className="px-2 py-2">Losses</th>
@@ -123,6 +124,7 @@ function LeaderboardPage() {
                         <tr key={entry.userId} className="border-b/60">
                           <td className="px-2 py-3 font-semibold">#{entry.rank}</td>
                           <td className="px-2 py-3">{entry.username}</td>
+                          <td className="px-2 py-3 font-semibold text-emerald-700">${entry.totalWinnings.toFixed(2)}</td>
                           <td className="px-2 py-3">{entry.settledBets}</td>
                           <td className="px-2 py-3">{entry.wins}</td>
                           <td className="px-2 py-3">{entry.losses}</td>

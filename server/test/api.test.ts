@@ -16,6 +16,7 @@ let marketId: number;
 let outcomeId: number;
 let archiveMarketId: number;
 let archiveOutcomeId: number;
+let generatedApiKey: string;
 
 beforeAll(async () => {
   // Run migrations to create tables on the in-memory DB
@@ -516,6 +517,87 @@ describe("User Profile Bets", () => {
     expect(data.items.length).toBeGreaterThan(0);
     expect(data.items[0].rank).toBeDefined();
     expect(data.items[0].netProfit).toBeDefined();
+  });
+});
+
+describe("API Keys", () => {
+  it("POST /api/users/me/api-key — generates a key", async () => {
+    const res = await app.handle(
+      new Request(`${BASE}/api/users/me/api-key`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.apiKey).toBeDefined();
+    expect(data.keyId).toBeDefined();
+    generatedApiKey = data.apiKey;
+  });
+
+  it("GET /api/users/me — accepts x-api-key", async () => {
+    const res = await app.handle(
+      new Request(`${BASE}/api/users/me`, {
+        headers: {
+          "x-api-key": generatedApiKey,
+        },
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.id).toBe(userId);
+  });
+
+  it("POST /api/markets — accepts x-api-key", async () => {
+    const res = await app.handle(
+      new Request(`${BASE}/api/markets`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": generatedApiKey,
+        },
+        body: JSON.stringify({
+          title: "API key market",
+          description: "Created with x-api-key",
+          outcomes: ["Yes", "No"],
+        }),
+      }),
+    );
+
+    expect(res.status).toBe(201);
+    const data = await res.json();
+    expect(data.id).toBeDefined();
+  });
+
+  it("DELETE /api/users/me/api-key — revokes key", async () => {
+    const res = await app.handle(
+      new Request(`${BASE}/api/users/me/api-key`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.success).toBe(true);
+  });
+
+  it("GET /api/users/me — rejects revoked x-api-key", async () => {
+    const res = await app.handle(
+      new Request(`${BASE}/api/users/me`, {
+        headers: {
+          "x-api-key": generatedApiKey,
+        },
+      }),
+    );
+
+    expect(res.status).toBe(401);
   });
 });
 

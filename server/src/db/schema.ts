@@ -21,6 +21,11 @@ export const usersTable = sqliteTable(
       .notNull()
       .default("user"),
     balance: real("balance").notNull().default(1000),
+    apiKeyId: text("api_key_id"),
+    apiKeyHash: text("api_key_hash"),
+    apiKeyCreatedAt: integer("api_key_created_at", { mode: "timestamp" }),
+    apiKeyLastUsedAt: integer("api_key_last_used_at", { mode: "timestamp" }),
+    apiKeyRevokedAt: integer("api_key_revoked_at", { mode: "timestamp" }),
     passwordHash: text("password_hash").notNull(),
     createdAt: integer("created_at", { mode: "timestamp" })
       .notNull()
@@ -32,6 +37,7 @@ export const usersTable = sqliteTable(
   (table) => ({
     usernameIdx: uniqueIndex("users_username_idx").on(table.username),
     emailIdx: uniqueIndex("users_email_idx").on(table.email),
+    apiKeyIdIdx: uniqueIndex("users_api_key_id_idx").on(table.apiKeyId),
   }),
 );
 

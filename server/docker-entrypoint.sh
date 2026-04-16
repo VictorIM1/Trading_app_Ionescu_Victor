@@ -34,6 +34,27 @@ const hasBalanceColumn = columns.some((column) => column?.name === 'balance');
 if (!hasBalanceColumn) {
   db.run(\"ALTER TABLE users ADD COLUMN balance REAL NOT NULL DEFAULT 1000\");
 }
+const hasApiKeyIdColumn = columns.some((column) => column?.name === 'api_key_id');
+if (!hasApiKeyIdColumn) {
+  db.run(\"ALTER TABLE users ADD COLUMN api_key_id TEXT\");
+}
+const hasApiKeyHashColumn = columns.some((column) => column?.name === 'api_key_hash');
+if (!hasApiKeyHashColumn) {
+  db.run(\"ALTER TABLE users ADD COLUMN api_key_hash TEXT\");
+}
+const hasApiKeyCreatedAtColumn = columns.some((column) => column?.name === 'api_key_created_at');
+if (!hasApiKeyCreatedAtColumn) {
+  db.run(\"ALTER TABLE users ADD COLUMN api_key_created_at INTEGER\");
+}
+const hasApiKeyLastUsedAtColumn = columns.some((column) => column?.name === 'api_key_last_used_at');
+if (!hasApiKeyLastUsedAtColumn) {
+  db.run(\"ALTER TABLE users ADD COLUMN api_key_last_used_at INTEGER\");
+}
+const hasApiKeyRevokedAtColumn = columns.some((column) => column?.name === 'api_key_revoked_at');
+if (!hasApiKeyRevokedAtColumn) {
+  db.run(\"ALTER TABLE users ADD COLUMN api_key_revoked_at INTEGER\");
+}
+db.run(\"CREATE UNIQUE INDEX IF NOT EXISTS users_api_key_id_idx ON users(api_key_id)\");
 
 const adminCountRow = db
   .query(\"SELECT COUNT(*) as count FROM users WHERE role = ?\")

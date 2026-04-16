@@ -1,11 +1,22 @@
 import { Elysia } from "elysia";
-import { getUserById } from "../lib/auth";
+import { getUserByApiKey, getUserById, touchApiKeyLastUsed } from "../lib/auth";
 
 export const authMiddleware = new Elysia({ name: "auth-middleware" })
   .derive(async ({ headers, jwt }) => {
     const authHeader = headers["authorization"];
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return { user: null };
+      const apiKey = headers["x-api-key"];
+      if (!apiKey) {
+        return { user: null };
+      }
+
+      const apiKeyUser = await getUserByApiKey(apiKey);
+      if (!apiKeyUser) {
+        return { user: null };
+      }
+
+      await touchApiKeyLastUsed(apiKeyUser.id);
+      return { user: apiKeyUser };
     }
 
     const token = authHeader.substring(7);

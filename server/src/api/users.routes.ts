@@ -1,6 +1,13 @@
 import { Elysia, t } from "elysia";
 import { authMiddleware } from "../middleware/auth.middleware";
-import { handleGetCurrentUser, handleGetLeaderboard, handleListMyBets } from "./handlers";
+import {
+  handleGenerateMyApiKey,
+  handleGetCurrentUser,
+  handleGetLeaderboard,
+  handleGetMyApiKey,
+  handleListMyBets,
+  handleRevokeMyApiKey,
+} from "./handlers";
 
 export const userRoutes = new Elysia({ prefix: "/api/users" })
   .use(authMiddleware)
@@ -22,6 +29,9 @@ export const userRoutes = new Elysia({ prefix: "/api/users" })
     (app) =>
       app
         .get("/me", handleGetCurrentUser)
+        .get("/me/api-key", handleGetMyApiKey)
+        .post("/me/api-key", handleGenerateMyApiKey)
+        .delete("/me/api-key", handleRevokeMyApiKey)
         .get("/me/bets", handleListMyBets, {
           query: t.Object({
             status: t.Optional(t.Union([t.Literal("active"), t.Literal("resolved")])),

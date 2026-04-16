@@ -74,6 +74,7 @@ export interface LeaderboardEntry {
   rank: number;
   userId: number;
   username: string;
+  totalWinnings: number;
   settledBets: number;
   wins: number;
   losses: number;
@@ -148,6 +149,20 @@ export interface ArchiveMarketResponse {
     username: string;
     amount: number;
   }>;
+}
+
+export interface ApiKeyInfoResponse {
+  hasApiKey: boolean;
+  keyId: string | null;
+  createdAt: string | null;
+  lastUsedAt: string | null;
+}
+
+export interface ApiKeyGenerateResponse {
+  apiKey: string;
+  keyId: string;
+  createdAt: string;
+  lastUsedAt: string | null;
 }
 
 // API Client
@@ -291,6 +306,22 @@ class ApiClient {
     });
 
     return this.request(`/api/users/leaderboard?${query.toString()}`);
+  }
+
+  async getMyApiKey(): Promise<ApiKeyInfoResponse> {
+    return this.request("/api/users/me/api-key");
+  }
+
+  async generateMyApiKey(): Promise<ApiKeyGenerateResponse> {
+    return this.request("/api/users/me/api-key", {
+      method: "POST",
+    });
+  }
+
+  async revokeMyApiKey(): Promise<{ success: boolean; revokedAt: string }> {
+    return this.request("/api/users/me/api-key", {
+      method: "DELETE",
+    });
   }
 }
 
